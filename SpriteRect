@@ -1,0 +1,126 @@
+using System;
+using UnityEditor;
+using UnityEngine;
+
+namespace Scripts.UI.Layout.SpriteRenderers
+{
+    [ExecuteInEditMode, RequireComponent(typeof(RectTransform))]
+    public class SpriteRect : MonoBehaviour
+    {
+        [SerializeField] bool Debugging;
+        [SerializeField] bool ScaleInEditorUpdate = true;
+        [SerializeField] eLayoutPattern _pattern;
+        [SerializeField] RectTransform _myRectTransform;
+        [SerializeField] RectTransform _parentRectTransf;
+        [SerializeField] SpriteRenderer _mySpriteRenderer;
+        [SerializeField] SpriteMask _mySpriteMask;
+
+        [ContextMenu("ResetLayout")]
+        public void ResetLayout()
+        {
+            Rect rect = _myRectTransform.rect;
+            float rectWidth = rect.width; 
+            float rectHeight = rect.height;
+
+            if (float.IsNaN(rectHeight) || float.IsNaN(rectWidth))
+            {
+                //unity hasn't not yet initialized (usually happens during start of the game)
+                if (Debugging) Debug.Log("return",this);
+                
+                return;
+            }
+
+            float spriteSizeX = 1;
+            float spriteSizeY = 1;
+
+            if (_mySpriteRenderer && _mySpriteRenderer.sprite)
+            {
+                switch (_mySpriteRenderer.drawMode)
+                {
+                    case SpriteDrawMode.Simple:
+                        var sprite = _mySpriteRenderer.sprite;
+                        Bounds bounds = sprite.bounds;
+                        spriteSizeX = bounds.size.x;
+                        spriteSizeY = bounds.size.y;
+                        break;
+
+                    case SpriteDrawMode.Sliced:
+                        
+                        break;
+
+                    case SpriteDrawMode.Tiled:
+                        break;
+
+                    default:
+                    {
+                        var boundsSize = _mySpriteRenderer.sprite.bounds.size;
+                        var size = _mySpriteRenderer.size;
+                        var border = _mySpriteRenderer.sprite.border;
+
+                        spriteSizeX = boundsSize.x * (size.x + border.x + border.z);
+                        spriteSizeY = boundsSize.y * (size.y + border.y + border.w);
+                        break;
+                    }
+                }
+            }
+
+            if (_mySpriteMask && _mySpriteMask.sprite)
+            {
+                var sprite = _mySpriteMask.sprite;
+                Bounds bounds = sprite.bounds;
+                spriteSizeX = bounds.size.x; //width  of the unscaled sprite in pixel
+                spriteSizeY = bounds.size.y; //height of the unscaled sprite in pixel
+            }
+
+            //scale that needs to be applied to the SpriteRender-Gameobject to give it the same screen size as the UI-Image
+            float scaleX = rectWidth / spriteSizeX;
+            float scaleY = rectHeight / spriteSizeY;
+
+            switch (_pattern)
+            {
+                case eLayoutPattern.Scale:
+                    _myRectTransform.localScale = new Vector3(scaleX, scaleY, 1F); //scale our SpriteRenderer
+                    #if UNITY_EDITOR
+                    if (Application.isPlaying) EditorUtility.SetDirty(_myRectTransform);
+                    #endif
+                    break;
+
+                case eLayoutPattern.SpriteSize:
+                    scaleX /= _myRectTransform.localScale.x;
+                    scaleY /= _myRectTransform.localScale.y;
+                    _mySpriteRenderer.size = new Vector2(scaleX,scaleY);
+                    #if UNITY_EDITOR
+                    if (Application.isPlaying) EditorUtility.SetDirty(_mySpriteRenderer);
+                    #endif
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+#if UNITY_EDITOR
+        void Update()
+        {
+            if (Application.isPlaying) return;
+            if (!ScaleInEditorUpdate) return;
+
+            if (_mySpriteRenderer == null || _parentRectTransf == null || _myRectTransform == null) Reset();
+            ResetLayout();
+        }
+
+        [ContextMenu("Reset")]
+        void Reset()
+        {
+            _parentRectTransf = transform.parent as RectTransform;
+            _mySpriteMask = gameObject.GetComponent<SpriteMask>();
+
+            if (!_mySpriteMask && !_mySpriteRenderer) _mySpriteRenderer = gameObject.CheckComponent<SpriteRenderer>();
+
+            _myRectTransform = transform as RectTransform;
+            EditorUtility.SetDirty(this);
+        }
+
+#endif
+    }
+}
